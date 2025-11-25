@@ -15,8 +15,8 @@ jobs:
             const org = 'test-org-payal';
             const skipRepos = ['.github'];
             
-            // Complete PR workflow with auto-merge, field updates, and status tracking
-            const workflowContent = String.raw`name: Add PR to Project and Auto-Merge
+            // Build workflow content with proper escaping
+            const workflowContent = `name: Add PR to Project and Auto-Merge
 
             on:
               pull_request:
@@ -35,10 +35,7 @@ jobs:
                       github-token: $` + `{{ secrets.TOKEN }}
                       script: |
                         const pr = context.payload.pull_request;
-                        if (!pr) { 
-                          console.log('No PR context'); 
-                          return; 
-                        }
+                        if (!pr) { console.log('No PR context'); return; }
                         
                         const action = context.payload.action;
                         console.log('Action: ' + action);
@@ -47,61 +44,51 @@ jobs:
                         const org = 'test-org-payal';
                         const projectNumber = 2;
                         
-                        console.log('\\n--- Getting Project Info ---');
-                        const projectQuery = await github.graphql(\`
+                        console.log('\\\\n--- Getting Project Info ---');
+                        const projectQuery = await github.graphql(\`` + `
                           query($` + `org: String!, $` + `projectNumber: Int!) {
                             organization(login: $` + `org) {
                               projectV2(number: $` + `projectNumber) {
                                 id
                                 fields(first: 20) {
                                   nodes {
-                                    ... on ProjectV2Field {
-                                      id
-                                      name
-                                    }
+                                    ... on ProjectV2Field { id name }
                                     ... on ProjectV2SingleSelectField {
-                                      id
-                                      name
-                                      options {
-                                        id
-                                        name
-                                      }
+                                      id name
+                                      options { id name }
                                     }
                                   }
                                 }
                               }
                             }
-                          }\`, { org: org, projectNumber: projectNumber });
+                          }\`` + `, { org: org, projectNumber: projectNumber });
                         
                         const project = projectQuery.organization.projectV2;
                         const projectId = project.id;
                         const fields = project.fields.nodes;
                         
                         console.log('Project ID: ' + projectId);
-                        console.log('Fields found: ' + fields.length);
                         
                         const releaseNotesField = fields.find(f => f.name === 'Release Notes');
                         const deployNotesField = fields.find(f => f.name === 'Deployment Notes');
                         const dependenciesField = fields.find(f => f.name === 'Dependencies');
                         const mergeStatusField = fields.find(f => f.name === 'Merge Status');
                         
-                        console.log('\\n--- Adding PR to Project ---');
+                        console.log('\\\\n--- Adding PR to Project ---');
                         let itemId = null;
                         
                         try {
-                          const addResult = await github.graphql(\`
+                          const addResult = await github.graphql(\`` + `
                             mutation($` + `projectId: ID!, $` + `contentId: ID!) {
                               addProjectV2ItemById(input: {projectId: $` + `projectId, contentId: $` + `contentId}) {
                                 item { id }
                               }
-                            }\`, { projectId: projectId, contentId: pr.node_id });
-                          
+                            }\`` + `, { projectId: projectId, contentId: pr.node_id });
                           itemId = addResult.addProjectV2ItemById.item.id;
                           console.log('✅ PR added - Item ID: ' + itemId);
                         } catch (e) {
-                          console.log('Error adding PR: ' + e.message);
-                          
-                          const findQuery = await github.graphql(\`
+                          console.log('Error: ' + e.message);
+                          const findQuery = await github.graphql(\`` + `
                             query($` + `projectId: ID!) {
                               node(id: $` + `projectId) {
                                 ... on ProjectV2 {
@@ -109,266 +96,188 @@ jobs:
                                     nodes {
                                       id
                                       content {
-                                        ... on PullRequest {
-                                          number
-                                          repository { name }
-                                        }
+                                        ... on PullRequest { number repository { name } }
                                       }
                                     }
                                   }
                                 }
                               }
-                            }\`, { projectId: projectId });
-                          
+                            }\`` + `, { projectId: projectId });
                           const existingItem = findQuery.node.items.nodes.find(
-                            item => item.content?.number === pr.number && 
-                                    item.content?.repository?.name === context.repo.repo
+                            item => item.content?.number === pr.number && item.content?.repository?.name === context.repo.repo
                           );
-                          
                           if (existingItem) {
                             itemId = existingItem.id;
-                            console.log('✅ Found existing item: ' + itemId);
+                            console.log('✅ Found existing: ' + itemId);
                           } else {
-                            console.log('❌ Could not add or find PR in project');
+                            console.log('❌ Could not add PR');
                             return;
                           }
                         }
                         
-                        console.log('\\n--- Extracting PR Content ---');
+                        console.log('\\\\n--- Extracting Content ---');
                         const body = pr.body || '';
-                        
-                        const releaseMatch = body.match(/## Release Notes\\s*\\n+([\\s\\S]*?)(?=\\n##|$)/i);
+                        const releaseMatch = body.match(/## Release Notes\\\\s*\\\\n+([\\\\s\\\\S]*?)(?=\\\\n##|$)/i);
                         const releaseNotes = releaseMatch ? releaseMatch[1].trim() : '';
-                        
-                        const deployMatch = body.match(/## Deployment Notes\\s*\\n+([\\s\\S]*?)(?=\\n##|$)/i);
+                        const deployMatch = body.match(/## Deployment Notes\\\\s*\\\\n+([\\\\s\\\\S]*?)(?=\\\\n##|$)/i);
                         const deployNotes = deployMatch ? deployMatch[1].trim() : '';
-                        
-                        const dependencyMatch = body.match(/## Dependencies\\s*\\n+([\\s\\S]*?)(?=\\n##|$)/i);
+                        const dependencyMatch = body.match(/## Dependencies\\\\s*\\\\n+([\\\\s\\\\S]*?)(?=\\\\n##|$)/i);
                         const dependencies = dependencyMatch ? dependencyMatch[1].trim() : '';
+                        const mergeStatus = pr.merged ? 'Merged' : 'Not Merged';
                         
                         console.log('Release Notes: ' + (releaseNotes ? 'Found' : 'Empty'));
                         console.log('Deployment Notes: ' + (deployNotes ? 'Found' : 'Empty'));
-                        console.log('Dependencies: ' + (dependencies ? 'Found' : 'Empty'));
-                        
-                        const mergeStatus = pr.merged ? 'Merged' : 'Not Merged';
                         console.log('Merge Status: ' + mergeStatus);
                         
-                        console.log('\\n--- Updating Fields ---');
-                        
+                        console.log('\\\\n--- Updating Fields ---');
                         if (releaseNotes && releaseNotesField) {
                           try {
-                            await github.graphql(\`
+                            await github.graphql(\`` + `
                               mutation($` + `projectId: ID!, $` + `itemId: ID!, $` + `fieldId: ID!, $` + `value: String!) {
                                 updateProjectV2ItemFieldValue(input: {
-                                  projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId,
-                                  value: { text: $` + `value }
+                                  projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId, value: { text: $` + `value }
                                 }) { projectV2Item { id } }
-                              }\`, {
-                                projectId: projectId, itemId: itemId,
-                                fieldId: releaseNotesField.id,
-                                value: releaseNotes.substring(0, 1024)
-                              });
+                              }\`` + `, { projectId: projectId, itemId: itemId, fieldId: releaseNotesField.id, value: releaseNotes.substring(0, 1024) });
                             console.log('✅ Release Notes updated');
-                          } catch (e) {
-                            console.log('⚠️ Release Notes update failed: ' + e.message);
-                          }
+                          } catch (e) { console.log('⚠️ Release Notes failed'); }
                         }
                         
                         if (deployNotes && deployNotesField) {
                           try {
-                            await github.graphql(\`
+                            await github.graphql(\`` + `
                               mutation($` + `projectId: ID!, $` + `itemId: ID!, $` + `fieldId: ID!, $` + `value: String!) {
                                 updateProjectV2ItemFieldValue(input: {
-                                  projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId,
-                                  value: { text: $` + `value }
+                                  projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId, value: { text: $` + `value }
                                 }) { projectV2Item { id } }
-                              }\`, {
-                                projectId: projectId, itemId: itemId,
-                                fieldId: deployNotesField.id,
-                                value: deployNotes.substring(0, 1024)
-                              });
+                              }\`` + `, { projectId: projectId, itemId: itemId, fieldId: deployNotesField.id, value: deployNotes.substring(0, 1024) });
                             console.log('✅ Deployment Notes updated');
-                          } catch (e) {
-                            console.log('⚠️ Deployment Notes update failed: ' + e.message);
-                          }
+                          } catch (e) { console.log('⚠️ Deployment Notes failed'); }
                         }
                         
                         if (dependencies && dependenciesField) {
                           try {
-                            await github.graphql(\`
+                            await github.graphql(\`` + `
                               mutation($` + `projectId: ID!, $` + `itemId: ID!, $` + `fieldId: ID!, $` + `value: String!) {
                                 updateProjectV2ItemFieldValue(input: {
-                                  projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId,
-                                  value: { text: $` + `value }
+                                  projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId, value: { text: $` + `value }
                                 }) { projectV2Item { id } }
-                              }\`, {
-                                projectId: projectId, itemId: itemId,
-                                fieldId: dependenciesField.id,
-                                value: dependencies.substring(0, 1024)
-                              });
+                              }\`` + `, { projectId: projectId, itemId: itemId, fieldId: dependenciesField.id, value: dependencies.substring(0, 1024) });
                             console.log('✅ Dependencies updated');
-                          } catch (e) {
-                            console.log('⚠️ Dependencies update failed: ' + e.message);
-                          }
+                          } catch (e) { console.log('⚠️ Dependencies failed'); }
                         }
                         
                         if (mergeStatusField) {
                           try {
                             const option = mergeStatusField.options?.find(o => o.name === mergeStatus);
                             if (option) {
-                              await github.graphql(\`
+                              await github.graphql(\`` + `
                                 mutation($` + `projectId: ID!, $` + `itemId: ID!, $` + `fieldId: ID!, $` + `optionId: String!) {
                                   updateProjectV2ItemFieldValue(input: {
-                                    projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId,
-                                    value: { singleSelectOptionId: $` + `optionId }
+                                    projectId: $` + `projectId, itemId: $` + `itemId, fieldId: $` + `fieldId, value: { singleSelectOptionId: $` + `optionId }
                                   }) { projectV2Item { id } }
-                                }\`, {
-                                  projectId: projectId, itemId: itemId,
-                                  fieldId: mergeStatusField.id,
-                                  optionId: option.id
-                                });
-                              console.log('✅ Merge Status updated: ' + mergeStatus);
-                            } else {
-                              console.log('⚠️ Merge Status option not found: ' + mergeStatus);
+                                }\`` + `, { projectId: projectId, itemId: itemId, fieldId: mergeStatusField.id, optionId: option.id });
+                              console.log('✅ Merge Status: ' + mergeStatus);
                             }
-                          } catch (e) {
-                            console.log('⚠️ Merge Status update failed: ' + e.message);
-                          }
+                          } catch (e) { console.log('⚠️ Status failed'); }
                         }
                         
-                        console.log('\\n--- Checking Merge Conditions ---');
-                        const hasReleaseNotes = releaseNotes && !releaseNotes.startsWith('<!--') && releaseNotes.length > 0;
-                        const hasDeployNotes = deployNotes && !deployNotes.startsWith('<!--') && deployNotes.length > 0;
+                        console.log('\\\\n--- Checking Merge ---');
+                        const hasRelease = releaseNotes && !releaseNotes.startsWith('<!--') && releaseNotes.length > 0;
+                        const hasDeploy = deployNotes && !deployNotes.startsWith('<!--') && deployNotes.length > 0;
                         
-                        if (!hasReleaseNotes || !hasDeployNotes) {
-                          console.log('❌ Cannot merge - missing required fields');
+                        if (!hasRelease || !hasDeploy) {
+                          console.log('❌ Cannot merge');
                           const missing = [];
-                          if (!hasReleaseNotes) missing.push('❌ Release notes');
-                          if (!hasDeployNotes) missing.push('❌ Deployment notes');
-                          
-                          const commentBody = '## ⏳ Merge Checklist\\n\\n**Required:**\\n' + missing.join('\\n') + '\\n\\nPlease complete all required items.';
-                          
+                          if (!hasRelease) missing.push('❌ Release notes');
+                          if (!hasDeploy) missing.push('❌ Deployment notes');
+                          const commentBody = '## ⏳ Merge Checklist\\\\n\\\\n**Required:**\\\\n' + missing.join('\\\\n');
                           const comments = await github.rest.issues.listComments({
                             owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number
                           });
                           const botComment = comments.data.find(c => c.user.type === 'Bot' && c.body.includes('Merge Checklist'));
-                          
                           if (botComment) {
                             await github.rest.issues.updateComment({
-                              owner: context.repo.owner, repo: context.repo.repo,
-                              comment_id: botComment.id, body: commentBody
+                              owner: context.repo.owner, repo: context.repo.repo, comment_id: botComment.id, body: commentBody
                             });
                           } else {
                             await github.rest.issues.createComment({
-                              owner: context.repo.owner, repo: context.repo.repo,
-                              issue_number: pr.number, body: commentBody
+                              owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, body: commentBody
                             });
                           }
                           return;
                         }
                         
-                        console.log('\\n--- Auto-Merging ---');
+                        console.log('\\\\n--- Merging ---');
                         try {
-                          let commitMessage = 'Release Notes:\\n' + releaseNotes + '\\n\\nDeployment Notes:\\n' + deployNotes;
-                          if (dependencies) commitMessage += '\\n\\nDependencies:\\n' + dependencies;
-                          
+                          let msg = 'Release Notes:\\\\n' + releaseNotes + '\\\\n\\\\nDeployment Notes:\\\\n' + deployNotes;
+                          if (dependencies) msg += '\\\\n\\\\nDependencies:\\\\n' + dependencies;
                           await github.rest.pulls.merge({
-                            owner: context.repo.owner,
-                            repo: context.repo.repo,
-                            pull_number: pr.number,
-                            merge_method: 'squash',
-                            commit_title: pr.title + ' (#' + pr.number + ')',
-                            commit_message: commitMessage
+                            owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number,
+                            merge_method: 'squash', commit_title: pr.title + ' (#' + pr.number + ')', commit_message: msg
                           });
-                          
-                          console.log('✅ PR merged successfully!');
-                          
+                          console.log('✅ Merged!');
                           await github.rest.issues.createComment({
-                            owner: context.repo.owner,
-                            repo: context.repo.repo,
-                            issue_number: pr.number,
-                            body: '## ✅ Auto-Merged!\\n\\nAll checks passed.'
+                            owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number,
+                            body: '## ✅ Auto-Merged!\\\\n\\\\nAll checks passed.'
                           });
                         } catch (e) {
                           console.error('❌ Merge failed: ' + e.message);
                           await github.rest.issues.createComment({
-                            owner: context.repo.owner,
-                            repo: context.repo.repo,
-                            issue_number: pr.number,
+                            owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number,
                             body: '❌ Auto-merge failed: ' + e.message
                           });
                         }
             `;
 
-            // Get all repos
             const repos = await github.paginate(github.rest.repos.listForOrg, {
-              org: org,
-              per_page: 100
+              org: org, per_page: 100
             });
             
-            console.log(`Found ${repos.length} repositories in ${org}`);
+            console.log(`Found ${repos.length} repositories`);
             console.log('---\n');
             
-            let successCount = 0;
-            let failCount = 0;
-            let skippedCount = 0;
+            let successCount = 0, failCount = 0, skippedCount = 0;
             
             for (const repo of repos) {
               if (skipRepos.includes(repo.name)) {
-                console.log(`⏭️  Skipping: ${repo.name}`);
+                console.log(`⏭️  ${repo.name}`);
                 skippedCount++;
                 continue;
               }
               
               console.log(`Processing: ${repo.name}`);
-              
               const path = '.github/workflows/pr-to-project.yml';
-              
               let sha = null;
+              
               try {
                 const existing = await github.rest.repos.getContent({
-                  owner: org,
-                  repo: repo.name,
-                  path: path,
-                  ref: repo.default_branch
+                  owner: org, repo: repo.name, path: path, ref: repo.default_branch
                 });
                 sha = existing.data.sha;
-                console.log(`  Updating existing workflow...`);
+                console.log(`  Updating...`);
               } catch (e) {
-                if (e.status === 404) {
-                  console.log(`  Creating new workflow...`);
-                } else {
-                  console.log(`  Warning: ${e.message}`);
-                }
+                if (e.status === 404) console.log(`  Creating...`);
               }
               
               try {
                 const params = {
-                  owner: org,
-                  repo: repo.name,
-                  path: path,
-                  message: sha ? 'Update: PR workflow [skip ci]' : 'Add: PR workflow [skip ci]',
+                  owner: org, repo: repo.name, path: path,
+                  message: 'Update: PR workflow [skip ci]',
                   content: Buffer.from(workflowContent).toString('base64'),
                   branch: repo.default_branch
                 };
-                
-                if (sha) {
-                  params.sha = sha;
-                }
+                if (sha) params.sha = sha;
                 
                 await github.rest.repos.createOrUpdateFileContents(params);
-                console.log(`  ✅ Success\n`);
+                console.log(`  ✅\n`);
                 successCount++;
               } catch (e) {
-                console.log(`  ❌ Failed: ${e.message}\n`);
+                console.log(`  ❌ ${e.message}\n`);
                 failCount++;
               }
             }
             
-            console.log('---');
             console.log('\n📊 Summary:');
-            console.log(`   Total repos: ${repos.length}`);
-            console.log(`   ⏭️  Skipped: ${skippedCount}`);
             console.log(`   ✅ Success: ${successCount}`);
             console.log(`   ❌ Failed: ${failCount}`);
-            console.log('\n✅ Done!');
+            console.log(`   ⏭️  Skipped: ${skippedCount}`);
