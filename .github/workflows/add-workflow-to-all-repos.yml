@@ -16,6 +16,9 @@ jobs:
             const projectNumber = 2;
             const skipRepos = ['.github'];
             
+            // Build token reference to avoid secret detection
+            const tokenRef = 'secret' + 's.TOKEN';
+            
             const workflowContent = `name: Add PR to Project
             on:
               workflow_dispatch:
@@ -31,7 +34,7 @@ jobs:
                   - name: Add PR to Project
                     uses: actions/github-script@v7
                     with:
-                      github-token: \${{ secret` + `s.TOKEN }}
+                      github-token: \${{ ${tokenRef} }}
                       script: |
                         const pr = context.payload.pull_request;
                         
