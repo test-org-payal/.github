@@ -13,11 +13,11 @@ jobs:
           github-token: ${{ secrets.TOKEN }}
           script: |
             const org = 'test-org-payal';
-            const projectNumber = 2;
             const skipRepos = ['.github'];
             
-            // Build workflow content - split to avoid secret detection
+            // Exact workflow content with workflow_dispatch
             const workflowContent = `name: Add PR to Project
+
             on:
               workflow_dispatch:
               pull_request:
@@ -25,6 +25,7 @@ jobs:
                 branches:
                   - main
                   - master
+
             jobs:
               add-to-project:
                 runs-on: ubuntu-latest
@@ -33,32 +34,32 @@ jobs:
                     uses: actions/github-script@v7
                     with:
                       github-token: $` + `{{ secrets.TOKEN }}
-` + `                      script: |
+                      script: |
                         const pr = context.payload.pull_request;
                         
-                        const projectData = await github.graphql(\`
-                          query(\$org: String!, \$number: Int!) {
-                            organization(login: \$org) {
-                              projectV2(number: \$number) {
+                        const projectData = await github.graphql(\`` + `
+                          query($` + `org: String!, $` + `number: Int!) {
+                            organization(login: $` + `org) {
+                              projectV2(number: $` + `number) {
                                 id
                               }
                             }
                           }
-                        \`, {
-                          org: '${org}',
-                          number: ${projectNumber}
+                        \`` + `, {
+                          org: 'test-org-payal',
+                          number: 2
                         });
                         
                         const projectId = projectData.organization.projectV2.id;
                         
                         try {
-                          await github.graphql(\`
-                            mutation(\$projectId: ID!, \$contentId: ID!) {
-                              addProjectV2ItemById(input: {projectId: \$projectId, contentId: \$contentId}) {
+                          await github.graphql(\`` + `
+                            mutation($` + `projectId: ID!, $` + `contentId: ID!) {
+                              addProjectV2ItemById(input: {projectId: $` + `projectId, contentId: $` + `contentId}) {
                                 item { id }
                               }
                             }
-                          \`, {
+                          \`` + `, {
                             projectId: projectId,
                             contentId: pr.node_id
                           });
@@ -72,13 +73,14 @@ jobs:
                         }
             `;
 
+            // Get all repos
             const repos = await github.paginate(github.rest.repos.listForOrg, {
               org: org,
               per_page: 100
             });
             
             console.log(`Found ${repos.length} repositories in ${org}`);
-            console.log('---');
+            console.log('---\n');
             
             let successCount = 0;
             let failCount = 0;
@@ -86,12 +88,12 @@ jobs:
             
             for (const repo of repos) {
               if (skipRepos.includes(repo.name)) {
-                console.log(`\n⏭️ Skipping: ${repo.name}`);
+                console.log(`⏭️  Skipping: ${repo.name}`);
                 skippedCount++;
                 continue;
               }
               
-              console.log(`\nProcessing: ${repo.name}`);
+              console.log(`Processing: ${repo.name}`);
               
               const path = '.github/workflows/pr-to-project.yml';
               
@@ -104,12 +106,12 @@ jobs:
                   ref: repo.default_branch
                 });
                 sha = existing.data.sha;
-                console.log(`  ℹ️ Workflow exists, updating...`);
+                console.log(`  Updating existing workflow...`);
               } catch (e) {
                 if (e.status === 404) {
-                  console.log(`  ℹ️ Workflow not found, creating...`);
+                  console.log(`  Creating new workflow...`);
                 } else {
-                  console.log(`  ⚠️ Error checking file: ${e.message}`);
+                  console.log(`  Warning: ${e.message}`);
                 }
               }
               
@@ -118,7 +120,7 @@ jobs:
                   owner: org,
                   repo: repo.name,
                   path: path,
-                  message: sha ? 'Update PR to Project workflow [skip ci]' : 'Add PR to Project workflow [skip ci]',
+                  message: sha ? 'Update: PR to Project workflow [skip ci]' : 'Add: PR to Project workflow [skip ci]',
                   content: Buffer.from(workflowContent).toString('base64'),
                   branch: repo.default_branch
                 };
@@ -128,18 +130,18 @@ jobs:
                 }
                 
                 await github.rest.repos.createOrUpdateFileContents(params);
-                console.log(`  ✅ Success`);
+                console.log(`  ✅ Success\n`);
                 successCount++;
               } catch (e) {
-                console.log(`  ❌ Failed: ${e.message}`);
+                console.log(`  ❌ Failed: ${e.message}\n`);
                 failCount++;
               }
             }
             
-            console.log('\n---');
-            console.log(`\n📊 Summary:`);
+            console.log('---');
+            console.log('\n📊 Summary:');
             console.log(`   Total repos: ${repos.length}`);
-            console.log(`   ⏭️ Skipped: ${skippedCount}`);
+            console.log(`   ⏭️  Skipped: ${skippedCount}`);
             console.log(`   ✅ Success: ${successCount}`);
             console.log(`   ❌ Failed: ${failCount}`);
             console.log('\n✅ Done!');
