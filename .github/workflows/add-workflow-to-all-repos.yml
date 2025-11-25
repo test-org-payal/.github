@@ -10,7 +10,7 @@ jobs:
       - name: Add workflow to all repos
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.ORG_ADMIN_TOKEN }}
+          github-token: ${{ secrets.TOKEN }}
           script: |
             const org = 'test-org-payal';
             const projectNumber = 2;
