@@ -16,10 +16,7 @@ jobs:
             const projectNumber = 2;
             const skipRepos = ['.github'];
             
-            // Using template literal substitution instead of manual escaping
-            const workflowContent = 
-            `name: Add PR to Project
-
+            const workflowContent = `name: Add PR to Project
             on:
               workflow_dispatch:
               pull_request:
@@ -27,7 +24,6 @@ jobs:
                 branches:
                   - main
                   - master
-
             jobs:
               add-to-project:
                 runs-on: ubuntu-latest
@@ -35,19 +31,19 @@ jobs:
                   - name: Add PR to Project
                     uses: actions/github-script@v7
                     with:
-                      github-token: $` + `{{ secrets.TOKEN }}
+                      github-token: \${{ secrets.TOKEN }}
                       script: |
                         const pr = context.payload.pull_request;
                         
-                        const projectData = await github.graphql(\`` + `
-                          query($` + `org: String!, $` + `number: Int!) {
-                            organization(login: $` + `org) {
-                              projectV2(number: $` + `number) {
+                        const projectData = await github.graphql(\`
+                          query(\$org: String!, \$number: Int!) {
+                            organization(login: \$org) {
+                              projectV2(number: \$number) {
                                 id
                               }
                             }
                           }
-                        \`` + `, {
+                        \`, {
                           org: '${org}',
                           number: ${projectNumber}
                         });
@@ -55,13 +51,13 @@ jobs:
                         const projectId = projectData.organization.projectV2.id;
                         
                         try {
-                          await github.graphql(\`` + `
-                            mutation($` + `projectId: ID!, $` + `contentId: ID!) {
-                              addProjectV2ItemById(input: {projectId: $` + `projectId, contentId: $` + `contentId}) {
+                          await github.graphql(\`
+                            mutation(\$projectId: ID!, \$contentId: ID!) {
+                              addProjectV2ItemById(input: {projectId: \$projectId, contentId: \$contentId}) {
                                 item { id }
                               }
                             }
-                          \`` + `, {
+                          \`, {
                             projectId: projectId,
                             contentId: pr.node_id
                           });
